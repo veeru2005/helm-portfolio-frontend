@@ -1,0 +1,64 @@
+    # Step 1: Build stage (Node.js for React/Vite)
+FROM node:18 AS build-stage
+WORKDIR /app
+
+# Install git to allow repo cloning
+RUN apt-get update && apt-get install -y git
+
+# Clone your frontend repo (replace with your actual repository URL)
+RUN git clone https://github.com/veeru2005/docker-portfolio-frontend.git .
+
+# Clear npm cache and remove any existing node_modules
+RUN rm -rf node_modules package-lock.json
+
+# Install npm-force-resolutions globally first
+RUN npm install -g npm-force-resolutions
+
+# Force the esbuild version to 0.25.10 before any other installs
+RUN npm install esbuild@0.25.10 --save-dev --legacy-peer-deps
+
+# Install dependencies with legacy peer deps and increased timeout
+RUN npm install --legacy-peer-deps --timeout=600000
+
+# Apply resolutions for esbuild and other packages after install
+RUN npx npm-force-resolutions
+
+# Set Node.js memory limit and build with more verbose output
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+RUN npm run build
+
+    # Step 2: Runtime stage (Tomcat for serving)
+    FROM tomcat:9-jdk17
+    RUN rm -rf /usr/local/tomcat/webapps/*
+
+    # Copy React build output into Tomcat webapps
+    COPY --from=build-stage /app/dist /usr/local/tomcat/webapps/portfolio_front1
+
+    # Create web.xml for SPA routing support
+    RUN mkdir -p /usr/local/tomcat/webapps/portfolio_front1/WEB-INF
+    RUN cat > /usr/local/tomcat/webapps/portfolio_front1/WEB-INF/web.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://java.sun.com/xml/ns/javaee
+         http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd"
+         version="3.0">
+    
+    <display-name>Portfolio Frontend</display-name>
+    
+    <!-- Error page for 404s - redirect to index.html for SPA routing -->
+    <error-page>
+        <error-code>404</error-code>
+        <location>/index.html</location>
+    </error-page>
+    
+    <!-- Default welcome file -->
+    <welcome-file-list>
+        <welcome-file>index.html</welcome-file>
+    </welcome-file-list>
+    
+</web-app>
+EOF
+
+    EXPOSE 8082
+    CMD ["catalina.sh", "run"]
