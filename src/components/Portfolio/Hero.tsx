@@ -81,7 +81,7 @@ const Hero = () => {
                 fontWeight: 'medium'
               }}
             >
-              Hello, I'm
+              Hello, I'
             </Typography>
 
             {/* Name layout for mobile - First name and middle name */}
